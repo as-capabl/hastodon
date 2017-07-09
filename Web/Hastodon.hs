@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Web.Hastodon
   (
     HastodonClient
@@ -16,6 +18,7 @@ module Web.Hastodon
   , Results(..)
   , Status(..)
   , Tag(..)
+  , StreamEvent(..)
 
   , mkHastodonClient
   , getAccountById
@@ -56,17 +59,31 @@ module Web.Hastodon
   , postUnfavorite
   , getHomeTimeline
   , getPublicTimeline
+  , sinkUserTimeline
+  , sourceUserTimeline
+  , sinkPublicTimeline
+  , sourcePublicTimeline
   , getTaggedTimeline
   ) where
 
 import Control.Applicative
+import Control.Monad.Trans
+import Control.Monad.Catch
+import Control.Monad.Trans.Resource
 import Data.Aeson
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Lazy.Char8 as LChar8
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Attoparsec.ByteString.Char8 as PC
 import Data.String.Utils
 import Network.HTTP.Simple
 import Network.HTTP.Types.Header
+import qualified Network.HTTP.Conduit as HC
+import qualified Data.Conduit as C
+import qualified Data.Conduit.List as CL
+import qualified Data.Conduit.Attoparsec as CA
+import Debug.Trace
 
 --
 -- Mastodon API endpoints
@@ -111,6 +128,8 @@ pUnreblog          = "/api/v1/statuses/:id/unreblog"
 pFavorite          = "/api/v1/statuses/:id/favourite"
 pUnfavorite        = "/api/v1/statuses/:id/unfavourite"
 pTaggedTimeline    = "/api/v1/timelines/tag/:hashtag"
+pUserStream        = "/api/v1/streaming/user"
+pPublicStream      = "/api/v1/streaming/public"
 
 data HastodonClient = HastodonClient {
   host :: String,
@@ -343,6 +362,7 @@ instance FromJSON Status where
            <*> (v .:  T.pack "mentions")
            <*> (v .:  T.pack "tags")
            <*> (v .:? T.pack "application")
+  parseJSON u = error $ "parseJSON " ++ show u
 
 data Tag = Tag {
   name :: String,
@@ -352,6 +372,10 @@ instance FromJSON Tag where
   parseJSON (Object v) =
     Tag <$> (v .: T.pack "name")
         <*> (v .: T.pack "url")
+
+data StreamEvent =
+  StreamUpdate Status | StreamNotify Notification | StreamDelete Int | StreamHeartbeat
+  deriving Show
 
 -- 
 -- helpers
@@ -396,7 +420,37 @@ postAndGetHastodonResult path body client = do
 postAndGetHastodonResponseJSON path body client = do
   initReq <- mkHastodonRequest path client
   let req = setRequestBodyURLEncoded body $ initReq
-  httpJSONEither req
+  trace (show req) $ httpJSONEither req
+
+getHastodonResponseSink path client sink = do
+  req <- liftIO $ mkHastodonRequest path client
+  httpSink req (\rp -> pipeJSONList C.=$= sink rp)
+
+getHastodonResponseSource path client getSource = do
+  req <- liftIO $ mkHastodonRequest path client
+  httpSource req (\rp -> getSource rp C.=$= pipeJSONList)
+
+pipeJSONList ::
+  MonadThrow m => C.ConduitM Char8.ByteString (Either String StreamEvent) m ()
+pipeJSONList = CL.sequence $ CA.sinkParser $ ignoreSpace >> (hatb <|> evnt <|> errStr)
+  where
+    ignoreSpace = PC.skipMany $ (PC.space >> return ()) <|> (PC.endOfLine >> return ())
+    evnt = do
+      PC.string "event:"
+      PC.skipSpace
+      ps <- sta <|> notf <|> del
+      PC.endOfLine
+      PC.string "data:"
+      PC.skipSpace
+      rst <- ps
+      PC.endOfLine
+      return $ case rst of {Error err -> Left err; Success r -> Right r}
+    sta = PC.string "update" >> return (fmap StreamUpdate . fromJSON <$> json)
+    notf = PC.string "notification" >> return (fmap StreamNotify . fromJSON <$> json)
+    del = PC.string "delete" >> return (fmap StreamDelete . fromJSON <$> json)
+    hatb = PC.char ':' >> oneLine >> return (Right StreamHeartbeat)
+    errStr = oneLine >>= return . Left . T.unpack . T.decodeUtf8
+    oneLine = PC.takeWhile1 (\x -> x /= '\n' && x /= '\r')
 
 -- 
 -- exported functions
@@ -568,7 +622,7 @@ getFavoritedBy id client = do
 
 postStatus :: String -> HastodonClient -> IO (Either JSONException Status)
 postStatus status client = do
-  res <- postAndGetHastodonResponseJSON pStatuses [(Char8.pack "status", Char8.pack status)] client
+  res <- postAndGetHastodonResponseJSON pStatuses [(Char8.pack "status", T.encodeUtf8 $ T.pack status)] client
   return (getResponseBody res :: Either JSONException Status)
 
 postReblog :: Int -> HastodonClient -> IO (Either JSONException Status)
@@ -600,6 +654,26 @@ getPublicTimeline :: HastodonClient -> IO (Either JSONException [Status])
 getPublicTimeline client = do
   res <- getHastodonResponseJSON pPublicTimeline client
   return (getResponseBody res :: Either JSONException [Status])
+
+sinkUserTimeline ::
+  (MonadIO m, MonadMask m) =>
+  HastodonClient -> (Response () -> C.Sink (Either String StreamEvent) m a) -> m a
+sinkUserTimeline = getHastodonResponseSink pUserStream
+
+sourceUserTimeline ::
+  (MonadResource m, MonadIO m) =>
+  HastodonClient -> C.ConduitM i (Either String StreamEvent) m ()
+sourceUserTimeline client = getHastodonResponseSource pUserStream client getResponseBody
+
+sinkPublicTimeline ::
+  (MonadIO m, MonadMask m) =>
+  HastodonClient -> (Response () -> C.Sink (Either String StreamEvent) m a) -> m a
+sinkPublicTimeline = getHastodonResponseSink pPublicStream
+
+sourcePublicTimeline ::
+  (MonadResource m, MonadIO m) =>
+  HastodonClient -> C.ConduitM i (Either String StreamEvent) m ()
+sourcePublicTimeline client = getHastodonResponseSource pPublicStream client getResponseBody
 
 getTaggedTimeline :: String -> HastodonClient -> IO (Either JSONException [Status])
 getTaggedTimeline hashtag client = do

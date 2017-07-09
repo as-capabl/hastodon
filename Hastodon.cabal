@@ -24,8 +24,14 @@ Library
                  bytestring,
                  http-types,
                  http-conduit,
+                 attoparsec,
                  MissingH,
-                 text
+                 text,
+                 mtl,
+                 exceptions,
+                 resourcet,
+                 conduit,
+                 conduit-extra
 
   Exposed-Modules: Web.Hastodon
   Other-Modules:
