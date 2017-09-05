@@ -430,8 +430,9 @@ getHastodonResponseSource path client getSource = do
   req <- liftIO $ mkHastodonRequest path client
   httpSource req (\rp -> getSource rp C.=$= pipeJSONList)
 
+-- Throws CA.ParseError
 pipeJSONList ::
-  MonadThrow m => C.ConduitM Char8.ByteString (Either String StreamEvent) m ()
+  MonadThrow m => C.ConduitM Char8.ByteString StreamEvent m ()
 pipeJSONList = CL.sequence $ CA.sinkParser $ ignoreSpace >> (hatb <|> evnt <|> errStr)
   where
     ignoreSpace = PC.skipMany $ (PC.space >> return ()) <|> (PC.endOfLine >> return ())
@@ -444,12 +445,15 @@ pipeJSONList = CL.sequence $ CA.sinkParser $ ignoreSpace >> (hatb <|> evnt <|> e
       PC.skipSpace
       rst <- ps
       PC.endOfLine
-      return $ case rst of {Error err -> Left err; Success r -> Right r}
+      case rst
+        of
+          Error err -> fail err
+          Success r -> return r
     sta = PC.string "update" >> return (fmap StreamUpdate . fromJSON <$> json)
     notf = PC.string "notification" >> return (fmap StreamNotify . fromJSON <$> json)
     del = PC.string "delete" >> return (fmap StreamDelete . fromJSON <$> json)
-    hatb = PC.char ':' >> oneLine >> return (Right StreamHeartbeat)
-    errStr = oneLine >>= return . Left . T.unpack . T.decodeUtf8
+    hatb = PC.char ':' >> oneLine >> return StreamHeartbeat
+    errStr = fail "Unknown stream element."
     oneLine = PC.takeWhile1 (\x -> x /= '\n' && x /= '\r')
 
 -- 
@@ -657,22 +661,22 @@ getPublicTimeline client = do
 
 sinkUserTimeline ::
   (MonadIO m, MonadMask m) =>
-  HastodonClient -> (Response () -> C.Sink (Either String StreamEvent) m a) -> m a
+  HastodonClient -> (Response () -> C.Sink StreamEvent m a) -> m a
 sinkUserTimeline = getHastodonResponseSink pUserStream
 
 sourceUserTimeline ::
   (MonadResource m, MonadIO m) =>
-  HastodonClient -> C.ConduitM i (Either String StreamEvent) m ()
+  HastodonClient -> C.ConduitM i StreamEvent m ()
 sourceUserTimeline client = getHastodonResponseSource pUserStream client getResponseBody
 
 sinkPublicTimeline ::
   (MonadIO m, MonadMask m) =>
-  HastodonClient -> (Response () -> C.Sink (Either String StreamEvent) m a) -> m a
+  HastodonClient -> (Response () -> C.Sink StreamEvent m a) -> m a
 sinkPublicTimeline = getHastodonResponseSink pPublicStream
 
 sourcePublicTimeline ::
   (MonadResource m, MonadIO m) =>
-  HastodonClient -> C.ConduitM i (Either String StreamEvent) m ()
+  HastodonClient -> C.ConduitM i StreamEvent m ()
 sourcePublicTimeline client = getHastodonResponseSource pPublicStream client getResponseBody
 
 getTaggedTimeline :: String -> HastodonClient -> IO (Either JSONException [Status])
