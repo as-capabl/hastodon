@@ -58,7 +58,9 @@ module Web.Hastodon
   , postFavorite
   , postUnfavorite
   , getHomeTimeline
+  , getHomeTimelineEx
   , getPublicTimeline
+  , getPublicTimelineEx
   , sinkUserTimeline
   , sourceUserTimeline
   , sinkPublicTimeline
@@ -409,7 +411,12 @@ getHastodonResponseBody path client = do
   res <- httpLBS req
   return $ getResponseBody res
 
-getHastodonResponseJSON path client = mkHastodonRequest path client >>= httpJSONEither
+getHastodonResponseJSONEx query path client = do
+  req <- mkHastodonRequest path client
+  let qToBS (qn, mqv) = (Char8.pack qn, Char8.pack <$> mqv)
+  httpJSONEither $ setRequestQueryString (qToBS <$> query) req
+
+getHastodonResponseJSON path client = getHastodonResponseJSONEx [] path client
 
 postAndGetHastodonResult path body client = do
   initReq <- mkHastodonRequest path client
@@ -650,13 +657,23 @@ postUnfavorite id client = do
   return (getResponseBody res :: Either JSONException Status)
 
 getHomeTimeline :: HastodonClient -> IO (Either JSONException [Status])
-getHomeTimeline client = do
-  res <- getHastodonResponseJSON pHomeTimeline client
+getHomeTimeline = getHomeTimelineEx []
+
+getHomeTimelineEx ::
+  [(String, Maybe String)] -> HastodonClient
+  -> IO (Either JSONException [Status])
+getHomeTimelineEx query client = do
+  res <- getHastodonResponseJSONEx query pHomeTimeline client
   return (getResponseBody res :: Either JSONException [Status])
 
 getPublicTimeline :: HastodonClient -> IO (Either JSONException [Status])
-getPublicTimeline client = do
-  res <- getHastodonResponseJSON pPublicTimeline client
+getPublicTimeline = getPublicTimelineEx []
+
+getPublicTimelineEx ::
+  [(String, Maybe String)] -> HastodonClient
+  -> IO (Either JSONException [Status])
+getPublicTimelineEx query client = do
+  res <- getHastodonResponseJSONEx query pPublicTimeline client
   return (getResponseBody res :: Either JSONException [Status])
 
 sinkUserTimeline ::
