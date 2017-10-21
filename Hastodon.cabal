@@ -25,7 +25,9 @@ Library
                  http-types,
                  http-conduit,
                  MissingH,
-                 text
+                 text,
+                 containers
 
-  Exposed-Modules: Web.Hastodon
+  Exposed-Modules: Web.Hastodon,
+                   Web.Hastodon.Option
   Other-Modules:

@@ -1,6 +1,8 @@
 module Web.Hastodon
   (
-    HastodonClient
+    module Web.Hastodon.Option
+
+  , HastodonClient
 
   , Account(..)
   , Application(..)
@@ -66,8 +68,11 @@ import qualified Data.ByteString.Lazy.Char8 as LChar8
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.String.Utils
+import qualified Data.Map as Map
 import Network.HTTP.Simple
 import Network.HTTP.Types.Header
+
+import Web.Hastodon.Option
 
 --
 -- Utility
@@ -381,16 +386,25 @@ mkHastodonHeader :: String -> Request -> Request
 mkHastodonHeader token =
   addRequestHeader hAuthorization $ utf8ToChar8 $ "Bearer " ++ token
 
-mkHastodonRequest :: String -> HastodonClient -> IO Request
-mkHastodonRequest path client = do
+mkHastodonRequestWithQuery ::
+  [(Char8.ByteString, Maybe Char8.ByteString)] -> String -> HastodonClient -> IO Request
+mkHastodonRequestWithQuery opt path client = do
   initReq <- parseRequest $ "https://" ++ (host client) ++ path
-  return $ mkHastodonHeader (token client) $ initReq
+  return $
+    mkHastodonHeader (token client) $
+    setRequestQueryString opt $ initReq
+
+mkHastodonRequest :: String -> HastodonClient -> IO Request
+mkHastodonRequest = mkHastodonRequestWithQuery []
 
 getHastodonResponseBody :: String -> HastodonClient -> IO LChar8.ByteString
 getHastodonResponseBody path client = do
   req <- mkHastodonRequest path client
   res <- httpLBS req
   return $ getResponseBody res
+
+getHastodonResponseJSONWithOption opt path client =
+  mkHastodonRequestWithQuery opt path client >>= httpJSONEither
 
 getHastodonResponseJSON path client = mkHastodonRequest path client >>= httpJSONEither
 
@@ -426,10 +440,15 @@ getCurrentAccount client = do
   res <- getHastodonResponseJSON pCurrentAccounts client
   return (getResponseBody res :: Either JSONException Account)
 
--- TODO support options
 getFollowers :: HastodonClient -> Int -> IO (Either JSONException [Account])
-getFollowers client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pFollowers) client
+getFollowers client = getFollowersWithOption client mempty
+
+getFollowersWithOption :: HastodonClient -> RangeOption -> Int -> IO (Either JSONException [Account])
+getFollowersWithOption client opt id = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":id" (show id) pFollowers)
+           client
   return (getResponseBody res :: Either JSONException [Account])
 
 getFollowing :: HastodonClient -> Int -> IO (Either JSONException [Account])
@@ -576,6 +595,13 @@ getFavoritedBy client id = do
 postStatus :: HastodonClient -> String ->  IO (Either JSONException Status)
 postStatus client status = do
   res <- postAndGetHastodonResponseJSON pStatuses [(Char8.pack "status", utf8ToChar8 status)] client
+  return (getResponseBody res :: Either JSONException Status)
+
+postStatusWithOption ::
+  HastodonClient -> PostStatusOption -> String ->  IO (Either JSONException Status)
+postStatusWithOption client opt status = do
+  let prms = [(Char8.pack "status", utf8ToChar8 status)] ++ optionAsForm opt
+  res <- postAndGetHastodonResponseJSON pStatuses prms client
   return (getResponseBody res :: Either JSONException Status)
 
 postReblog :: HastodonClient -> Int ->  IO (Either JSONException Status)
