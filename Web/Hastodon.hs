@@ -2,7 +2,9 @@
 
 module Web.Hastodon
   (
-    HastodonClient(..)
+    module Web.Hastodon.Option
+
+  , HastodonClient(..)
 
   , Account(..)
   , Application(..)
@@ -24,7 +26,9 @@ module Web.Hastodon
   , getAccountById
   , getCurrentAccount
   , getFollowers
+  , getFollowersWithOption
   , getFollowing
+  , getFollowingWithOption
   , getAccountStatuses
   , postFollow
   , postUnfollow
@@ -47,20 +51,21 @@ module Web.Hastodon
   , postNotificationsClear
   , getReports
   , getSearchedResults
+  , getSearchedResultsWithOption
   , getStatus
+  , getStatusWithOption
   , getCard
   , getContext
   , getRebloggedBy
   , getFavoritedBy
   , postStatus
+  , postStatusWithOption
   , postReblog
   , postUnreblog
   , postFavorite
   , postUnfavorite
   , getHomeTimeline
-  , getHomeTimelineEx
   , getPublicTimeline
-  , getPublicTimelineEx
   , sinkUserTimeline
   , sourceUserTimeline
   , sinkPublicTimeline
@@ -79,6 +84,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Attoparsec.ByteString.Char8 as PC
 import Data.String.Utils
+import qualified Data.Map as Map
 import Network.HTTP.Simple
 import Network.HTTP.Types.Header
 import qualified Network.HTTP.Conduit as HC
@@ -86,6 +92,8 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.Conduit.Attoparsec as CA
 import Debug.Trace
+
+import Web.Hastodon.Option
 
 --
 -- Utility
@@ -406,10 +414,16 @@ mkHastodonHeader :: String -> Request -> Request
 mkHastodonHeader token =
   addRequestHeader hAuthorization $ utf8ToChar8 $ "Bearer " ++ token
 
-mkHastodonRequest :: String -> HastodonClient -> IO Request
-mkHastodonRequest path client = do
+mkHastodonRequestWithQuery ::
+  [(Char8.ByteString, Maybe Char8.ByteString)] -> String -> HastodonClient -> IO Request
+mkHastodonRequestWithQuery opt path client = do
   initReq <- parseRequest $ "https://" ++ (host client) ++ path
-  return $ mkHastodonHeader (token client) $ initReq
+  return $
+    mkHastodonHeader (token client) $
+    setRequestQueryString opt $ initReq
+
+mkHastodonRequest :: String -> HastodonClient -> IO Request
+mkHastodonRequest = mkHastodonRequestWithQuery []
 
 getHastodonResponseBody :: String -> HastodonClient -> IO LChar8.ByteString
 getHastodonResponseBody path client = do
@@ -417,12 +431,10 @@ getHastodonResponseBody path client = do
   res <- httpLBS req
   return $ getResponseBody res
 
-getHastodonResponseJSONEx query path client = do
-  req <- mkHastodonRequest path client
-  let qToBS (qn, mqv) = (Char8.pack qn, Char8.pack <$> mqv)
-  httpJSONEither $ setRequestQueryString (qToBS <$> query) req
+getHastodonResponseJSONWithOption opt path client =
+  mkHastodonRequestWithQuery opt path client >>= httpJSONEither
 
-getHastodonResponseJSON path client = getHastodonResponseJSONEx [] path client
+getHastodonResponseJSON path client = mkHastodonRequest path client >>= httpJSONEither
 
 postAndGetHastodonResult path body client = do
   initReq <- mkHastodonRequest path client
@@ -490,15 +502,26 @@ getCurrentAccount client = do
   res <- getHastodonResponseJSON pCurrentAccounts client
   return (getResponseBody res :: Either JSONException Account)
 
--- TODO support options
 getFollowers :: HastodonClient -> Int -> IO (Either JSONException [Account])
-getFollowers client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pFollowers) client
+getFollowers client = getFollowersWithOption client mempty
+
+getFollowersWithOption :: HastodonClient -> RangeOption -> Int -> IO (Either JSONException [Account])
+getFollowersWithOption client opt id = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":id" (show id) pFollowers)
+           client
   return (getResponseBody res :: Either JSONException [Account])
 
 getFollowing :: HastodonClient -> Int -> IO (Either JSONException [Account])
-getFollowing client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pFollowing) client
+getFollowing client = getFollowingWithOption client mempty
+
+getFollowingWithOption :: HastodonClient -> RangeOption -> Int -> IO (Either JSONException [Account])
+getFollowingWithOption client opt id = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":id" (show id) pFollowing)
+           client
   return (getResponseBody res :: Either JSONException [Account])
 
 getAccountStatuses :: HastodonClient -> Int -> IO (Either JSONException [Status])
@@ -590,8 +613,11 @@ getMutes client = do
   return (getResponseBody res :: Either JSONException [Account])
 
 getNotifications :: HastodonClient -> IO (Either JSONException [Notification])
-getNotifications client = do
-  res <- getHastodonResponseJSON pNotifications client
+getNotifications client = getNotificationsWithOption client mempty
+
+getNotificationsWithOption :: HastodonClient -> RangeOption -> IO (Either JSONException [Notification])
+getNotificationsWithOption client opt = do
+  res <- getHastodonResponseJSONWithOption (optionAsQuery opt) pNotifications client
   return (getResponseBody res :: Either JSONException [Notification])
 
 getNotificationById :: HastodonClient -> Int ->  IO (Either JSONException Notification)
@@ -608,13 +634,23 @@ getReports client = do
   return (getResponseBody res :: Either JSONException [Report])
 
 getSearchedResults :: HastodonClient -> String ->  IO (Either JSONException [Results])
-getSearchedResults client query = do
-  res <- getHastodonResponseJSON (pSearch ++ "?q=" ++ query) client
+getSearchedResults client = getSearchedResultsWithOption client mempty
+
+getSearchedResultsWithOption ::
+  HastodonClient -> LimitOption -> String ->  IO (Either JSONException [Results])
+getSearchedResultsWithOption client opt query = do
+  res <- getHastodonResponseJSONWithOption (optionAsQuery opt) (pSearch ++ "?q=" ++ query) client
   return (getResponseBody res :: Either JSONException [Results])
 
 getStatus :: HastodonClient -> Int ->  IO (Either JSONException Status)
-getStatus client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pStatus) client
+getStatus client = getStatusWithOption client mempty
+
+getStatusWithOption :: HastodonClient -> GetStatusOption -> Int ->  IO (Either JSONException Status)
+getStatusWithOption client opt id = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":id" (show id) pStatus)
+           client
   return (getResponseBody res :: Either JSONException Status)
 
 getCard :: HastodonClient -> Int ->  IO (Either JSONException Card)
@@ -642,6 +678,13 @@ postStatus client status = do
   res <- postAndGetHastodonResponseJSON pStatuses [(Char8.pack "status", utf8ToChar8 status)] client
   return (getResponseBody res :: Either JSONException Status)
 
+postStatusWithOption ::
+  HastodonClient -> PostStatusOption -> String ->  IO (Either JSONException Status)
+postStatusWithOption client opt status = do
+  let prms = [(Char8.pack "status", utf8ToChar8 status)] ++ optionAsForm opt
+  res <- postAndGetHastodonResponseJSON pStatuses prms client
+  return (getResponseBody res :: Either JSONException Status)
+
 postReblog :: HastodonClient -> Int ->  IO (Either JSONException Status)
 postReblog client id = do
   res <- postAndGetHastodonResponseJSON (replace ":id" (show id) pReblog) [] client
@@ -665,22 +708,8 @@ postUnfavorite client id = do
 getHomeTimeline :: HastodonClient -> IO (Either JSONException [Status])
 getHomeTimeline = getHomeTimelineEx []
 
-getHomeTimelineEx ::
-  [(String, Maybe String)] -> HastodonClient
-  -> IO (Either JSONException [Status])
-getHomeTimelineEx query client = do
-  res <- getHastodonResponseJSONEx query pHomeTimeline client
-  return (getResponseBody res :: Either JSONException [Status])
-
 getPublicTimeline :: HastodonClient -> IO (Either JSONException [Status])
 getPublicTimeline = getPublicTimelineEx []
-
-getPublicTimelineEx ::
-  [(String, Maybe String)] -> HastodonClient
-  -> IO (Either JSONException [Status])
-getPublicTimelineEx query client = do
-  res <- getHastodonResponseJSONEx query pPublicTimeline client
-  return (getResponseBody res :: Either JSONException [Status])
 
 sinkUserTimeline ::
   (MonadIO m, MonadMask m) =>

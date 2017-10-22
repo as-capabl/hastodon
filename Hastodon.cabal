@@ -31,7 +31,9 @@ Library
                  exceptions,
                  resourcet,
                  conduit,
-                 conduit-extra
+                 conduit-extra,
+                 containers
 
-  Exposed-Modules: Web.Hastodon
+  Exposed-Modules: Web.Hastodon,
+                   Web.Hastodon.Option
   Other-Modules:
