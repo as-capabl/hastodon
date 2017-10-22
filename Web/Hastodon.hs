@@ -23,7 +23,9 @@ module Web.Hastodon
   , getAccountById
   , getCurrentAccount
   , getFollowers
+  , getFollowersWithOption
   , getFollowing
+  , getFollowingWithOption
   , getAccountStatuses
   , postFollow
   , postUnfollow
@@ -46,12 +48,15 @@ module Web.Hastodon
   , postNotificationsClear
   , getReports
   , getSearchedResults
+  , getSearchedResultsWithOption
   , getStatus
+  , getStatusWithOption
   , getCard
   , getContext
   , getRebloggedBy
   , getFavoritedBy
   , postStatus
+  , postStatusWithOption
   , postReblog
   , postUnreblog
   , postFavorite
@@ -452,8 +457,14 @@ getFollowersWithOption client opt id = do
   return (getResponseBody res :: Either JSONException [Account])
 
 getFollowing :: HastodonClient -> Int -> IO (Either JSONException [Account])
-getFollowing client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pFollowing) client
+getFollowing client = getFollowingWithOption client mempty
+
+getFollowingWithOption :: HastodonClient -> RangeOption -> Int -> IO (Either JSONException [Account])
+getFollowingWithOption client opt id = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":id" (show id) pFollowing)
+           client
   return (getResponseBody res :: Either JSONException [Account])
 
 getAccountStatuses :: HastodonClient -> Int -> IO (Either JSONException [Status])
@@ -545,8 +556,11 @@ getMutes client = do
   return (getResponseBody res :: Either JSONException [Account])
 
 getNotifications :: HastodonClient -> IO (Either JSONException [Notification])
-getNotifications client = do
-  res <- getHastodonResponseJSON pNotifications client
+getNotifications client = getNotificationsWithOption client mempty
+
+getNotificationsWithOption :: HastodonClient -> RangeOption -> IO (Either JSONException [Notification])
+getNotificationsWithOption client opt = do
+  res <- getHastodonResponseJSONWithOption (optionAsQuery opt) pNotifications client
   return (getResponseBody res :: Either JSONException [Notification])
 
 getNotificationById :: HastodonClient -> Int ->  IO (Either JSONException Notification)
@@ -563,13 +577,23 @@ getReports client = do
   return (getResponseBody res :: Either JSONException [Report])
 
 getSearchedResults :: HastodonClient -> String ->  IO (Either JSONException [Results])
-getSearchedResults client query = do
-  res <- getHastodonResponseJSON (pSearch ++ "?q=" ++ query) client
+getSearchedResults client = getSearchedResultsWithOption client mempty
+
+getSearchedResultsWithOption ::
+  HastodonClient -> LimitOption -> String ->  IO (Either JSONException [Results])
+getSearchedResultsWithOption client opt query = do
+  res <- getHastodonResponseJSONWithOption (optionAsQuery opt) (pSearch ++ "?q=" ++ query) client
   return (getResponseBody res :: Either JSONException [Results])
 
 getStatus :: HastodonClient -> Int ->  IO (Either JSONException Status)
-getStatus client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pStatus) client
+getStatus client = getStatusWithOption client mempty
+
+getStatusWithOption :: HastodonClient -> GetStatusOption -> Int ->  IO (Either JSONException Status)
+getStatusWithOption client opt id = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":id" (show id) pStatus)
+           client
   return (getResponseBody res :: Either JSONException Status)
 
 getCard :: HastodonClient -> Int ->  IO (Either JSONException Card)
