@@ -47,6 +47,7 @@ module Web.Hastodon
   , getInstance
   , getMutes
   , getNotifications
+  , getNotificationsWithOption
   , getNotificationById
   , postNotificationsClear
   , getReports
