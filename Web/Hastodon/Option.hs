@@ -14,6 +14,11 @@ module Web.Hastodon.Option
   , maxId
   , minId
 
+    -- * Domain & Range Options
+  , DomRangeOption ()
+  , IsDomRangeOption
+  , instanceLocal
+
     -- * Status getting options
   , GetStatusOption ()
   , IsGetStatusOption

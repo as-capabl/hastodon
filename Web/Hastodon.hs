@@ -65,12 +65,15 @@ module Web.Hastodon
   , postFavorite
   , postUnfavorite
   , getHomeTimeline
+  , getHomeTimelineWithOption
   , getPublicTimeline
+  , getPublicTimelineWithOption
   , sinkUserTimeline
   , sourceUserTimeline
   , sinkPublicTimeline
   , sourcePublicTimeline
   , getTaggedTimeline
+  , getTaggedTimelineWithOption
   ) where
 
 import Control.Applicative
@@ -706,10 +709,21 @@ postUnfavorite client id = do
   return (getResponseBody res :: Either JSONException Status)
 
 getHomeTimeline :: HastodonClient -> IO (Either JSONException [Status])
-getHomeTimeline = getHomeTimelineEx []
+getHomeTimeline client = getHomeTimelineWithOption client mempty
+
+getHomeTimelineWithOption :: HastodonClient -> DomRangeOption -> IO (Either JSONException [Status])
+getHomeTimelineWithOption client opt = do
+  res <- getHastodonResponseJSONWithOption (optionAsQuery opt) pHomeTimeline client
+  return (getResponseBody res :: Either JSONException [Status])
+
 
 getPublicTimeline :: HastodonClient -> IO (Either JSONException [Status])
-getPublicTimeline = getPublicTimelineEx []
+getPublicTimeline client = getPublicTimelineWithOption client mempty
+
+getPublicTimelineWithOption :: HastodonClient -> DomRangeOption -> IO (Either JSONException [Status])
+getPublicTimelineWithOption client opt = do
+  res <- getHastodonResponseJSONWithOption (optionAsQuery opt) pPublicTimeline client
+  return (getResponseBody res :: Either JSONException [Status])
 
 sinkUserTimeline ::
   (MonadIO m, MonadMask m) =>
@@ -732,6 +746,13 @@ sourcePublicTimeline ::
 sourcePublicTimeline client = getHastodonResponseSource pPublicStream client getResponseBody
 
 getTaggedTimeline :: HastodonClient -> String ->  IO (Either JSONException [Status])
-getTaggedTimeline client hashtag = do
-  res <- getHastodonResponseJSON (replace ":hashtag" hashtag pTaggedTimeline) client
+getTaggedTimeline client = getTaggedTimelineWithOption client mempty
+
+getTaggedTimelineWithOption ::
+  HastodonClient -> DomRangeOption -> String ->  IO (Either JSONException [Status])
+getTaggedTimelineWithOption client opt hashtag = do
+  res <- getHastodonResponseJSONWithOption
+           (optionAsQuery opt)
+           (replace ":hashtag" hashtag pTaggedTimeline)
+           client
   return (getResponseBody res :: Either JSONException [Status])
