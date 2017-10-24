@@ -621,9 +621,7 @@ getFavoritedBy client id = do
   return (getResponseBody res :: Either JSONException [Account])
 
 postStatus :: HastodonClient -> String ->  IO (Either JSONException Status)
-postStatus client status = do
-  res <- postAndGetHastodonResponseJSON pStatuses [(Char8.pack "status", utf8ToChar8 status)] client
-  return (getResponseBody res :: Either JSONException Status)
+postStatus client = postStatusWithOption client mempty
 
 postStatusWithOption ::
   HastodonClient -> PostStatusOption -> String ->  IO (Either JSONException Status)

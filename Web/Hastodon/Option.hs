@@ -88,7 +88,7 @@ optionAsQuery x = do
 
 optionAsForm :: IsOption a => a -> [(Char8.ByteString, Char8.ByteString)]
 optionAsForm opt = fmap cnv $ optionAsQuery opt
-  where cnv (x, y) = (x, fromMaybe mempty y)
+  where cnv (x, y) = (x, fromMaybe (Char8.pack "true") y)
 
 --
 -- Limit option
@@ -130,7 +130,7 @@ instance IsLimitOption RangeOption where {}
 instance IsRangeOption RangeOption where {}
 
 minId :: IsRangeOption a => Int -> a
-minId i = mkOption "max_id" $ Just (show i)
+minId i = mkOption "min_id" $ Just (show i)
 
 maxId :: IsRangeOption a => Int -> a
 maxId i = mkOption "max_id" $ Just (show i)
@@ -197,8 +197,6 @@ instance Monoid PostStatusOption where
 
 class IsOption a => IsPostStatusOption a where {}
 
-instance IsLimitOption PostStatusOption where {}
-instance IsRangeOption PostStatusOption where {}
 instance IsPostStatusOption PostStatusOption where {}
 
 data Visibility = V_Direct | V_Private | V_Unlisted | V_Public deriving (Eq, Show)
