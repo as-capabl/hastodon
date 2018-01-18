@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Web.Hastodon
   (
@@ -96,6 +97,7 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.Conduit.Attoparsec as CA
 import Debug.Trace
+import GHC.Generics (Generic)
 
 import Web.Hastodon.Option
 
@@ -159,7 +161,7 @@ data HastodonClient = HastodonClient {
 data OAuthResponse = OAuthResponse {
   accessToken :: String
   -- NOTE currently ignore other fields.
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON OAuthResponse where
   parseJSON (Object v) =
     OAuthResponse <$> (v .: T.pack "access_token")
@@ -180,7 +182,7 @@ data Account = Account {
   accountAvatarStatic :: String,
   accountHeader :: String,
   accountHeaderStatic :: String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Account where
   parseJSON (Object v) =
     Account <$> (v .: T.pack "id")
@@ -202,7 +204,7 @@ instance FromJSON Account where
 data Application = Application {
   applicationName :: String,
   applicationWebsite :: Maybe String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Application where
   parseJSON (Object v) =
     Application <$> (v .:  T.pack "name")
@@ -215,7 +217,7 @@ data Attachment = Attachment {
   attachmentRemoteUrl :: String,
   attachmentPreviewUrl :: String,
   attachmentTextUrl :: Maybe String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Attachment where
   parseJSON (Object v) =
     Attachment <$> (v .:  T.pack "id")
@@ -230,7 +232,7 @@ data Card = Card {
   cardTitle :: String,
   cardDescription :: String,
   cardImage :: String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Card where
   parseJSON (Object v) =
     Card <$> (v .: T.pack "url")
@@ -241,7 +243,7 @@ instance FromJSON Card where
 data Context = Context {
   contextAncestors :: [Status],
   contextDescendants :: [Status]
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Context where
   parseJSON (Object v) =
     Context <$> (v .: T.pack "ancestors")
@@ -252,7 +254,7 @@ data Instance = Instance {
   instanceTitle :: String,
   instanceDescription :: String,
   instanceEmail :: String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Instance where
   parseJSON (Object v) =
     Instance <$> (v .: T.pack "uri")
@@ -265,7 +267,7 @@ data Mention = Mention {
   mentionUsername :: String,
   mentionAcct :: String,
   mentionId :: Int
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Mention where
   parseJSON (Object v) =
     Mention <$> (v .: T.pack "url")
@@ -279,7 +281,7 @@ data Notification = Notification {
   notificationCreatedAt :: String,
   notificationAccount :: Account,
   notificationStatus :: Maybe Status
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Notification where
   parseJSON (Object v) =
     Notification <$> (v .:  T.pack "id")
@@ -293,7 +295,7 @@ data OAuthClient = OAuthClient {
   oauthClientRedirectUri :: String,
   oauthClientClientId :: String,
   oauthClientClientSecret :: String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON OAuthClient where
   parseJSON (Object v) =
     OAuthClient <$> (v .: T.pack "id")
@@ -308,7 +310,7 @@ data Relationship = Relationship {
   relationshipBlocking :: Bool,
   relationshipMuting :: Bool,
   relationshipRequested :: Bool
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Relationship where
   parseJSON (Object v) =
     Relationship <$> (v .: T.pack "id")
@@ -321,7 +323,7 @@ instance FromJSON Relationship where
 data Report = Report {
   reportId :: Int,
   reportActionToken :: String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Report where
   parseJSON (Object v) =
     Report <$> (v .: T.pack "id")
@@ -331,7 +333,7 @@ data Results = Results {
   resultAccounts :: [Account],
   resultStatus :: [Status],
   resultHashtags :: [String]
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Results where
   parseJSON (Object v) =
     Results <$> (v .: T.pack "accounts")
@@ -359,7 +361,7 @@ data Status = Status {
   statusMentions :: [Mention],
   statusTags :: [Tag],
   statusApplication :: Maybe Application
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Status where
   parseJSON (Object v) =
     Status <$> (v .:  T.pack "id")
@@ -387,7 +389,7 @@ instance FromJSON Status where
 data Tag = Tag {
   name :: String,
   url :: String
-} deriving (Show)
+} deriving (Show, Generic)
 instance FromJSON Tag where
   parseJSON (Object v) =
     Tag <$> (v .: T.pack "name")
@@ -395,7 +397,7 @@ instance FromJSON Tag where
 
 data StreamEvent =
   StreamUpdate Status | StreamNotify Notification | StreamDelete Int | StreamHeartbeat
-  deriving Show
+  deriving (Show, Generic)
 
 -- 
 -- helpers
