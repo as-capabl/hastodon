@@ -46,6 +46,7 @@ module Web.Hastodon
   , postAuthorizeRequest
   , postRejectRequest
   , getInstance
+  , postMediaFile
   , getMutes
   , getNotifications
   , getNotificationsWithOption
@@ -62,6 +63,7 @@ module Web.Hastodon
   , getFavoritedBy
   , postStatus
   , postStatusWithOption
+  , postStatusWithMediaIds
   , postReblog
   , postUnreblog
   , postFavorite
@@ -100,6 +102,8 @@ import Debug.Trace
 import GHC.Generics (Generic)
 
 import Web.Hastodon.Option
+import Network.HTTP.Client.MultipartFormData
+import Network.Mime
 
 --
 -- Utility
@@ -130,6 +134,7 @@ pFollowRequests    = "/api/v1/follow_requests"
 pAuthorizeRequest  = "/api/v1/follow_requests/:id/authorize"
 pRejectRequest     = "/api/v1/follow_requests/:id/reject"
 pInstance          = "/api/v1/instance"
+pMedia             = "/api/v1/media"
 pMutes             = "/api/v1/mutes"
 pNotifications     = "/api/v1/notifications"
 pNotificationById  = "/api/v1/notifications/:id"
@@ -153,6 +158,8 @@ pTaggedTimeline    = "/api/v1/timelines/tag/:hashtag"
 pUserStream        = "/api/v1/streaming/user"
 pPublicStream      = "/api/v1/streaming/public"
 
+type HastodonId = String
+
 data HastodonClient = HastodonClient {
   host :: String,
   token :: String
@@ -167,7 +174,7 @@ instance FromJSON OAuthResponse where
     OAuthResponse <$> (v .: T.pack "access_token")
 
 data Account = Account {
-  accountId :: Int,
+  accountId :: HastodonId,
   accountUsername :: String,
   accountAcct :: String,
   accountDisplayName :: String,
@@ -211,10 +218,10 @@ instance FromJSON Application where
                 <*> (v .:? T.pack "website")
 
 data Attachment = Attachment {
-  attachmentId :: Int,
+  attachmentId :: HastodonId,
   attachmentType :: String,
   attachmentUrl :: String,
-  attachmentRemoteUrl :: String,
+  attachmentRemoteUrl :: Maybe String,
   attachmentPreviewUrl :: String,
   attachmentTextUrl :: Maybe String
 } deriving (Show, Generic)
@@ -223,7 +230,7 @@ instance FromJSON Attachment where
     Attachment <$> (v .:  T.pack "id")
                <*> (v .:  T.pack "type")
                <*> (v .:  T.pack "url")
-               <*> (v .:  T.pack "remote_url")
+               <*> (v .:? T.pack "remote_url")
                <*> (v .:  T.pack "preview_url")
                <*> (v .:? T.pack "text_url")
 
@@ -266,7 +273,7 @@ data Mention = Mention {
   mentionUrl :: String,
   mentionUsername :: String,
   mentionAcct :: String,
-  mentionId :: Int
+  mentionId :: HastodonId
 } deriving (Show, Generic)
 instance FromJSON Mention where
   parseJSON (Object v) =
@@ -276,7 +283,7 @@ instance FromJSON Mention where
             <*> (v .: T.pack "id")
 
 data Notification = Notification {
-  notificationId :: Int,
+  notificationId :: HastodonId,
   notificationType :: String,
   notificationCreatedAt :: String,
   notificationAccount :: Account,
@@ -291,7 +298,7 @@ instance FromJSON Notification where
                  <*> (v .:? T.pack "status")
 
 data OAuthClient = OAuthClient {
-  oauthClientId :: Int,
+  oauthClientId :: HastodonId,
   oauthClientRedirectUri :: String,
   oauthClientClientId :: String,
   oauthClientClientSecret :: String
@@ -304,7 +311,7 @@ instance FromJSON OAuthClient where
                 <*> (v .: T.pack "client_secret")
 
 data Relationship = Relationship {
-  relationshipId :: Int,
+  relationshipId :: HastodonId,
   relationshipFollowing :: Bool,
   relationshipFollowed_by :: Bool,
   relationshipBlocking :: Bool,
@@ -321,7 +328,7 @@ instance FromJSON Relationship where
                  <*> (v .: T.pack "requested")
 
 data Report = Report {
-  reportId :: Int,
+  reportId :: HastodonId,
   reportActionToken :: String
 } deriving (Show, Generic)
 instance FromJSON Report where
@@ -341,7 +348,7 @@ instance FromJSON Results where
             <*> (v .: T.pack "hashtags")
 
 data Status = Status {
-  statusId :: Int,
+  statusId :: HastodonId,
   statusUri :: String,
   statusUrl :: String,
   statusAccount :: Account,
@@ -613,6 +620,17 @@ getInstance client = do
   res <- getHastodonResponseJSON pInstance client
   return (getResponseBody res :: Either JSONException Instance)
 
+postMediaFile :: HastodonClient -> String -> String -> IO (Either JSONException Attachment)
+postMediaFile client filename description = do
+  initReq <- mkHastodonRequest pMedia client
+  let file = partFileSource (T.pack "file") filename
+  let mimetype = defaultMimeLookup (T.pack filename)
+  req <- formDataBody [file { partContentType = Just mimetype },
+                       partBS (T.pack "description") (utf8ToChar8 description)
+                      ] initReq
+  res <- httpJSONEither req
+  return (getResponseBody res :: Either JSONException Attachment)
+
 getMutes :: HastodonClient -> IO (Either JSONException [Account])
 getMutes client = do
   res <- getHastodonResponseJSON pMutes client
@@ -687,6 +705,13 @@ postStatusWithOption ::
 postStatusWithOption client opt status = do
   let prms = [(Char8.pack "status", utf8ToChar8 status)] ++ optionAsForm opt
   res <- postAndGetHastodonResponseJSON pStatuses prms client
+  return (getResponseBody res :: Either JSONException Status)
+
+postStatusWithMediaIds :: HastodonClient -> String -> [HastodonId] -> IO (Either JSONException Status)
+postStatusWithMediaIds client status mediaIds = do
+  let unpackedMediaIds = [(Char8.pack "media_ids[]",utf8ToChar8 media)|media <- mediaIds] -- Rails array parameter convention?
+  let body = (Char8.pack "status",utf8ToChar8 status):unpackedMediaIds
+  res <- postAndGetHastodonResponseJSON pStatuses body client
   return (getResponseBody res :: Either JSONException Status)
 
 postReblog :: HastodonClient -> Int ->  IO (Either JSONException Status)
