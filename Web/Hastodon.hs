@@ -6,6 +6,7 @@ module Web.Hastodon
     module Web.Hastodon.Option
 
   , HastodonClient(..)
+  , HastodonId
 
   , Account(..)
   , Application(..)
@@ -352,8 +353,8 @@ data Status = Status {
   statusUri :: String,
   statusUrl :: String,
   statusAccount :: Account,
-  statusInReplyToId :: Maybe Int,
-  statusInReplyToAccountId :: Maybe Int,
+  statusInReplyToId :: Maybe HastodonId,
+  statusInReplyToAccountId :: Maybe HastodonId,
   statusReblog :: Maybe Status,
   statusContent :: String,
   statusCreatedAt :: String,
@@ -505,9 +506,9 @@ mkHastodonClient clientId clientSecret username password host = do
     Left err -> return $ Nothing
     Right oauthData -> return $ Just $ HastodonClient host (accessToken oauthData)
 
-getAccountById :: HastodonClient -> Int -> IO (Either JSONException Account)
+getAccountById :: HastodonClient -> HastodonId -> IO (Either JSONException Account)
 getAccountById client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pAccountById) client
+  res <- getHastodonResponseJSON (replace ":id" id pAccountById) client
   return (getResponseBody res :: Either JSONException Account)
 
 getCurrentAccount :: HastodonClient -> IO (Either JSONException Account)
@@ -537,9 +538,9 @@ getFollowingWithOption client opt id = do
            client
   return (getResponseBody res :: Either JSONException [Account])
 
-getAccountStatuses :: HastodonClient -> Int -> IO (Either JSONException [Status])
+getAccountStatuses :: HastodonClient -> HastodonId -> IO (Either JSONException [Status])
 getAccountStatuses client id = do
-  res <- getHastodonResponseJSON (replace ":id" (show id) pAccountStatuses) client
+  res <- getHastodonResponseJSON (replace ":id" id pAccountStatuses) client
   return (getResponseBody res :: Either JSONException [Status])
 
 getRelationships :: HastodonClient -> [Int] ->  IO (Either JSONException [Relationship])
@@ -666,14 +667,15 @@ getSearchedResultsWithOption client opt query = do
   res <- getHastodonResponseJSONWithOption (optionAsQuery opt) (pSearch ++ "?q=" ++ query) client
   return (getResponseBody res :: Either JSONException [Results])
 
-getStatus :: HastodonClient -> Int ->  IO (Either JSONException Status)
+getStatus :: HastodonClient -> HastodonId ->  IO (Either JSONException Status)
 getStatus client = getStatusWithOption client mempty
 
-getStatusWithOption :: HastodonClient -> GetStatusOption -> Int ->  IO (Either JSONException Status)
+getStatusWithOption ::
+  HastodonClient -> GetStatusOption -> HastodonId ->IO (Either JSONException Status)
 getStatusWithOption client opt id = do
   res <- getHastodonResponseJSONWithOption
            (optionAsQuery opt)
-           (replace ":id" (show id) pStatus)
+           (replace ":id" id pStatus)
            client
   return (getResponseBody res :: Either JSONException Status)
 
@@ -714,9 +716,9 @@ postStatusWithMediaIds client status mediaIds = do
   res <- postAndGetHastodonResponseJSON pStatuses body client
   return (getResponseBody res :: Either JSONException Status)
 
-postReblog :: HastodonClient -> Int ->  IO (Either JSONException Status)
+postReblog :: HastodonClient -> HastodonId ->  IO (Either JSONException Status)
 postReblog client id = do
-  res <- postAndGetHastodonResponseJSON (replace ":id" (show id) pReblog) [] client
+  res <- postAndGetHastodonResponseJSON (replace ":id" id pReblog) [] client
   return (getResponseBody res :: Either JSONException Status)
 
 postUnreblog :: HastodonClient -> Int ->  IO (Either JSONException Status)
@@ -724,9 +726,9 @@ postUnreblog client id = do
   res <- postAndGetHastodonResponseJSON (replace ":id" (show id) pUnreblog) [] client
   return (getResponseBody res :: Either JSONException Status)
 
-postFavorite :: HastodonClient -> Int ->  IO (Either JSONException Status)
+postFavorite :: HastodonClient -> HastodonId ->  IO (Either JSONException Status)
 postFavorite client id = do
-  res <- postAndGetHastodonResponseJSON (replace ":id" (show id) pFavorite) [] client
+  res <- postAndGetHastodonResponseJSON (replace ":id" id pFavorite) [] client
   return (getResponseBody res :: Either JSONException Status)
 
 postUnfavorite :: HastodonClient -> Int ->  IO (Either JSONException Status)

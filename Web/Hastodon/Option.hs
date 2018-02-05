@@ -129,11 +129,11 @@ class IsOption a => IsRangeOption a where {}
 instance IsLimitOption RangeOption where {}
 instance IsRangeOption RangeOption where {}
 
-minId :: IsRangeOption a => Int -> a
-minId i = mkOption "min_id" $ Just (show i)
+minId :: IsRangeOption a => String -> a
+minId i = mkOption "min_id" $ Just i
 
-maxId :: IsRangeOption a => Int -> a
-maxId i = mkOption "max_id" $ Just (show i)
+maxId :: IsRangeOption a => String -> a
+maxId i = mkOption "max_id" $ Just i
 
 --
 -- Domain&Range options
